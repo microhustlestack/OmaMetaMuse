@@ -17,8 +17,8 @@ install_cli_launcher() {
 echo "WSTUNLTD (TM) Muse Ai x Omarchy Linux Project by JJUANtheBRAND (TM)"
 target="${1:-default}"
 case "$target" in
-  launcher) "$REPO_DIR/bin/muse-ai" launcher ;;
-  gadget)   "$REPO_DIR/bin/muse-ai" install-gadget ;;
+  launcher) bash "$REPO_DIR/bin/muse-ai" launcher ;;
+  gadget)   bash "$REPO_DIR/bin/muse-ai" install-gadget ;;
   all)      install_cli_launcher; "$HOME/.local/bin/muse-ai" install-gadget ;;
   default)  install_cli_launcher; echo; echo "Next, only when you are ready and on your own machine:"; echo "  bash install.sh gadget" ;;
   *) echo "unknown target: $target (use: launcher | gadget | all)" >&2; exit 1 ;;
