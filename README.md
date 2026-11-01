@@ -27,6 +27,25 @@ around it.
 Upstream: https://github.com/facebookincubator/muse-gadget-sdk
 Upstream license: Apache 2.0. This wrapper: MIT, see LICENSE.
 
+## About
+
+WSTUNLTD™ Muse Ai x Omarchy Linux Project by JJUANtheBRAND™ is a
+community packaging project from Providence, RI. It exists for one
+reason: giving old hardware a second life on Omarchy Linux, with Muse
+as the voice and hands for the machine.
+
+It is built for people who refurbish and reuse machines, for the
+WSTUNLTD youth studio and demo setups that run this stack, and for
+anyone who wants the same Muse on Omarchy setup we proved on
+October 22, 2026, without piecing it together from scratch.
+
+It is not a Meta product, not a fork of the SDK, and not a local
+model. Muse stays in the cloud. Meta's official installer is fetched
+from Meta at install time, and this wrapper adds the Omarchy
+launcher, the preflight checks, and the guardrails around it. The
+companion project, WSTUNLTD™ Second Brain Omarchy by JJUANtheBRAND™,
+covers the local model and vault side on the same machine.
+
 ## Read this first: the safety rule
 
 The gadget service grants cloud command access to the machine it runs
