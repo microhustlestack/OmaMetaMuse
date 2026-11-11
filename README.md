@@ -223,7 +223,8 @@ Test log: [docs/TESTED-HARDWARE.md](docs/TESTED-HARDWARE.md)
 Built and tested by J'Juan Wilson Jr. / JJUANtheBRAND™ / Micro Hustle
 Stack, Providence, RI. Part of the WSTUNLTD™ work of giving old hardware
 a second life on Omarchy Linux: the same 2011 Air also runs the
-WSTUNLTD™ Second Brain Omarchy package end to end.
+[WSTUNLTD™ Second Brain Omarchy package](https://github.com/microhustlestack/second-brain-omarchy)
+end to end.
 
 ## Install guide, portrait version
 
