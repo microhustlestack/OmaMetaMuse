@@ -29,9 +29,10 @@ Upstream license: Apache 2.0. This wrapper: MIT, see LICENSE.
 
 ## Install at a glance
 
-![Install guide: Muse on Omarchy Linux, A to Z](docs/install-guide.png)
+![Install guide: Muse on Omarchy Linux, A to Z, landscape](docs/install-guide-landscape.png)
 
-The full step by step is in the Quick start below.
+The full step by step is in the Quick start below. The portrait
+version of this guide is at the bottom of this page.
 
 ## About
 
@@ -223,3 +224,7 @@ Built and tested by J'Juan Wilson Jr. / JJUANtheBRAND™ / Micro Hustle
 Stack, Providence, RI. Part of the WSTUNLTD™ work of giving old hardware
 a second life on Omarchy Linux: the same 2011 Air also runs the
 WSTUNLTD™ Second Brain Omarchy package end to end.
+
+## Install guide, portrait version
+
+![Install guide: Muse on Omarchy Linux, A to Z](docs/install-guide.png)
