@@ -157,6 +157,29 @@ gadget service and it does not ask for a token. That step is always a
 separate, deliberate run of `muse-ai install-gadget`, for the safety
 reason above.
 
+## Companion bar plugin
+
+The `plugin/` folder holds a small Omarchy 4 (Quattro) shell plugin: a
+bar widget that shows whether this machine is linked to Muse. It
+watches `musegadget.service` and shows a status dot in the bar, green
+while the service is active, red while it is not. Clicking it launches
+Muse through `muse-ai`. Its plugin ID is
+`io.github.microhustlestack.muse`.
+
+The marketplace edition lives in its own repository, because the
+Omarchy plugin system installs one plugin from a repository root:
+
+https://github.com/microhustlestack/omarchy-muse-plugin
+
+```bash
+omarchy plugin add https://github.com/microhustlestack/omarchy-muse-plugin
+omarchy plugin enable io.github.microhustlestack.muse
+```
+
+The copy in `plugin/` here is the same source, kept with the package
+it belongs to. Settings, IPC commands, and removal instructions are in
+[plugin/README.md](plugin/README.md).
+
 ## The CLI
 
 ```text
