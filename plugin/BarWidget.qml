@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Widgets
 import qs.Commons
 import qs.Ui
 
@@ -8,9 +9,10 @@ import qs.Ui
 //
 // Shows the link state of this machine's Muse gadget service
 // (musegadget.service, from Meta's Muse Gadgets SDK) as a status dot
-// next to a label: green while the service is active, red while it is
-// not, grey until the first check lands. Clicking the widget launches
-// Muse (the muse-ai launcher from the OmaMetaMuse package by default).
+// next to the Muse icon: green while the service is active, red while
+// it is not, grey until the first check lands. Clicking the widget
+// launches Muse (the muse-ai launcher from the OmaMetaMuse package by
+// default).
 //
 // IPC, from a terminal:
 //   omarchy-shell io.github.microhustlestack.muse status   -> active / inactive / ...
@@ -20,11 +22,18 @@ BarWidget {
   id: root
   moduleName: "io.github.microhustlestack.muse"
 
+  readonly property string iconName: setting("iconName", "muse-ai")
   readonly property string label: setting("label", "Muse")
-  readonly property bool showLabel: setting("showLabel", true)
+  readonly property bool showLabel: setting("showLabel", false)
   readonly property int refreshSeconds: setting("refreshSeconds", 30)
   readonly property string serviceName: setting("serviceName", "musegadget.service")
   readonly property string launchCommand: setting("launchCommand", "muse-ai")
+
+  // Themed icon for the bar; empty when the icon theme has no match, in
+  // which case the text label takes its place so the widget never
+  // renders blank.
+  readonly property string iconSource: Quickshell.iconPath(root.iconName, true)
+  readonly property bool hasIcon: iconSource.length > 0
 
   // Raw `systemctl is-active` answer: "active", "inactive", "failed",
   // or "" while the first check is still running.
@@ -87,9 +96,16 @@ BarWidget {
       color: root.dotColor
     }
 
+    IconImage {
+      anchors.verticalCenter: parent.verticalCenter
+      visible: root.hasIcon && !root.vertical
+      implicitSize: 18
+      source: root.iconSource
+    }
+
     Text {
       anchors.verticalCenter: parent.verticalCenter
-      visible: root.showLabel && !root.vertical
+      visible: !root.vertical && (root.showLabel || !root.hasIcon)
       text: root.label
       color: root.fg
       font.family: root.bar ? root.bar.fontFamily : Style.font.family
