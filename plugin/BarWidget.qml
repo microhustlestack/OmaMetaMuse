@@ -112,7 +112,25 @@ BarWidget {
     }
   }
 
+  // The bar host owns pointer input over widget slots (for dragging and
+  // panel marks), so a plain MouseArea in a third-party widget never sees a
+  // click. Registering the MouseArea as a click target with the injected
+  // bar API is what lets its clicks through. The bar is injected after the
+  // widget is created, so registration syncs whenever it changes.
+  function syncClickRegistration() {
+    if (root.bar && typeof root.bar.registerClickTarget === "function")
+      root.bar.registerClickTarget(clickArea)
+  }
+
+  onBarChanged: syncClickRegistration()
+  Component.onCompleted: syncClickRegistration()
+  Component.onDestruction: {
+    if (root.bar && typeof root.bar.unregisterClickTarget === "function")
+      root.bar.unregisterClickTarget(clickArea)
+  }
+
   MouseArea {
+    id: clickArea
     anchors.fill: parent
     cursorShape: Qt.PointingHandCursor
     onClicked: root.launch()
