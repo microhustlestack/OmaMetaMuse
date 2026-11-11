@@ -163,8 +163,7 @@ The `plugin/` folder holds a small Omarchy 4 (Quattro) shell plugin: a
 bar widget that shows whether this machine is linked to Muse. It
 watches `musegadget.service` and shows a status dot next to the Muse
 icon in the bar, green while the service is active, red while it is
-not. Clicking it launches
-Muse through `muse-ai`. Its plugin ID is
+not. Clicking it opens Muse through Omarchy's webapp launcher. Its plugin ID is
 `io.github.microhustlestack.muse`.
 
 The marketplace edition lives in its own repository, because the

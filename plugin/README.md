@@ -33,7 +33,7 @@ Manual removal: disable it first (`omarchy plugin disable io.github.microhustles
 
 - Omarchy 4 (Quattro) with the shell plugin system. The widget uses only the standard plugin APIs (`qs.Ui` BarWidget, Quickshell Process, Widgets and IPC).
 - Optional, for a green dot: the `musegadget.service` systemd unit from Meta's Muse Gadgets SDK, installed and running on this machine. The [OmaMetaMuse package](https://github.com/microhustlestack/OmaMetaMuse) sets that up safely on your own studio or personal machines. Without it the widget still installs and simply reports the service as not active.
-- Optional, for click to launch: the `muse-ai` command from the OmaMetaMuse package. Change the launch command in the widget settings if you launch Muse another way.
+- Click to launch uses Omarchy's built-in `omarchy-launch-webapp`, which opens muse.ai as a webapp. Change the launch command in the widget settings if you launch Muse another way.
 
 ## Settings
 
@@ -46,7 +46,7 @@ Set inline on the widget's entry in `~/.config/omarchy/shell.json`, or through t
 | `showLabel` | `false` | On adds the text label next to the icon |
 | `refreshSeconds` | `30` | How often the gadget service state is checked (5 to 300) |
 | `serviceName` | `musegadget.service` | systemd unit that links this machine to Muse |
-| `launchCommand` | `muse-ai` | Command run when the widget is clicked |
+| `launchCommand` | `omarchy-launch-webapp https://muse.ai/` | Command run when the widget is clicked |
 
 ## IPC
 

@@ -87,6 +87,14 @@ install_icon() {
   rm -rf "$HOME/.cache/thumbnails" 2>/dev/null || true
 }
 
+cmd_open() {
+  if command -v omarchy-launch-webapp >/dev/null 2>&1; then
+    exec omarchy-launch-webapp https://muse.ai/
+  else
+    exec xdg-open https://muse.ai/
+  fi
+}
+
 cmd_launcher() {
   banner
   mkdir -p "$HOME/.local/share/applications"
@@ -173,6 +181,7 @@ usage() {
 Usage: muse-ai <command>
   doctor           Check OS, arch, Bluetooth, service, launcher
   status           Short status: paired service and launcher
+  open             Open Muse (muse.ai) as a webapp
   launcher         Install or reinstall the Muse AI menu entry
   install-gadget   Download Meta's official installer and run it
   pair-help        Print the pairing steps in order
@@ -183,6 +192,7 @@ EOF
 case "${1:-}" in
   doctor) cmd_doctor ;;
   status) cmd_status ;;
+  open) cmd_open ;;
   launcher) cmd_launcher ;;
   install-gadget) cmd_install_gadget ;;
   pair-help) cmd_pair_help ;;

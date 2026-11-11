@@ -11,8 +11,7 @@ import qs.Ui
 // (musegadget.service, from Meta's Muse Gadgets SDK) as a status dot
 // next to the Muse icon: green while the service is active, red while
 // it is not, grey until the first check lands. Clicking the widget
-// launches Muse (the muse-ai launcher from the OmaMetaMuse package by
-// default).
+// opens Muse as a webapp (Omarchy's omarchy-launch-webapp by default).
 //
 // IPC, from a terminal:
 //   omarchy-shell io.github.microhustlestack.muse status   -> active / inactive / ...
@@ -27,7 +26,7 @@ BarWidget {
   readonly property bool showLabel: setting("showLabel", false)
   readonly property int refreshSeconds: setting("refreshSeconds", 30)
   readonly property string serviceName: setting("serviceName", "musegadget.service")
-  readonly property string launchCommand: setting("launchCommand", "muse-ai")
+  readonly property string launchCommand: setting("launchCommand", "omarchy-launch-webapp https://muse.ai/")
 
   // Themed icon for the bar; empty when the icon theme has no match, in
   // which case the text label takes its place so the widget never
@@ -65,7 +64,7 @@ BarWidget {
 
   Process {
     id: launchProc
-    command: ["muse-ai"]
+    command: ["omarchy-launch-webapp", "https://muse.ai/"]
   }
 
   Timer {
