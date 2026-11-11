@@ -15,7 +15,7 @@ warn() { printf '  ! %s\n' "$*" >&2; }
 fail() { printf '  x %s\n' "$*" >&2; exit 1; }
 
 banner() {
-  echo "WSTUNLTD (TM) Muse Ai x Omarchy Linux Project by JJUANtheBRAND (TM)"
+  echo "OmaMetaMuse by WSTUNLTD"
   echo "Wrapper for Meta's official Muse Gadgets SDK on Omarchy Linux."
   echo
 }

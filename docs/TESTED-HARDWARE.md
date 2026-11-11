@@ -2,8 +2,7 @@
 
 ## First install: MacBook Air 11-inch, Mid 2011
 
-Date: October 22, 2026. Project: WSTUNLTD™ Muse Ai x Omarchy Linux
-Project by JJUANtheBRAND™.
+Date: October 22, 2026. Project: OmaMetaMuse by WSTUNLTD.
 
 Machine, as read on device:
 

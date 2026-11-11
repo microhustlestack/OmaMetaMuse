@@ -1,4 +1,4 @@
-# WSTUNLTD™ Muse Ai x Omarchy Linux Project by JJUANtheBRAND™
+# OmaMetaMuse by WSTUNLTD
 
 **Muse on Omarchy Linux, packaged so anyone can load it the same way we did.**
 
@@ -27,9 +27,15 @@ around it.
 Upstream: https://github.com/facebookincubator/muse-gadget-sdk
 Upstream license: Apache 2.0. This wrapper: MIT, see LICENSE.
 
+## Install at a glance
+
+![Install guide: Muse on Omarchy Linux, A to Z](docs/install-guide.png)
+
+The full step by step is in the Quick start below.
+
 ## About
 
-WSTUNLTD™ Muse Ai x Omarchy Linux Project by JJUANtheBRAND™ is a
+OmaMetaMuse by WSTUNLTD is a
 community packaging project from Providence, RI. It exists for one
 reason: giving old hardware a second life on Omarchy Linux, with Muse
 as the voice and hands for the machine.
@@ -98,8 +104,8 @@ https://github.com/microhustlestack/second-brain-omarchy
 ## Quick start
 
 ```bash
-git clone https://github.com/microhustlestack/muse-ai-omarchy.git
-cd muse-ai-omarchy
+git clone https://github.com/microhustlestack/omametamuse.git
+cd omametamuse
 
 # 1. Check the machine first. No changes are made.
 #    (bash form, so a fresh clone works even without the exec bit set)

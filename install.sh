@@ -14,7 +14,7 @@ install_cli_launcher() {
   "$HOME/.local/bin/muse-ai" launcher
 }
 
-echo "WSTUNLTD (TM) Muse Ai x Omarchy Linux Project by JJUANtheBRAND (TM)"
+echo "OmaMetaMuse by WSTUNLTD"
 target="${1:-default}"
 case "$target" in
   launcher) bash "$REPO_DIR/bin/muse-ai" launcher ;;
