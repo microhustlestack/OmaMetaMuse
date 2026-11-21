@@ -56,7 +56,7 @@ BarWidget {
     if (root.linked) return "Muse gadget service active. Click to open Muse."
     return "Muse gadget service " + root.linkState + ". Click to open Muse."
   }
-  readonly property real pressScale: root.pressable
+  property real pressScale: root.pressable
     && ((mouseArea.pressedButtons | root.heldButtons) & (Qt.LeftButton | Qt.RightButton | Qt.MiddleButton))
     ? 0.9 : 1
 
