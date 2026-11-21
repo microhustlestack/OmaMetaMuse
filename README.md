@@ -1,5 +1,7 @@
 # OmaMetaMuse by WSTUNLTD
 
+![OmaMetaMuse by WSTUNLTD — Muse AI launcher and gadget SDK wrapper for Omarchy Linux](docs/omametamuse-header.png)
+
 **Muse on Omarchy Linux, packaged so anyone can load it the same way we did.**
 
 > **Security notice:** the Muse gadget service grants Muse remote command
