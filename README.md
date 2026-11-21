@@ -1,5 +1,7 @@
 # OmaMetaMuse by WSTUNLTD
 
+![OmaMetaMuse by WSTUNLTD — Muse AI launcher and gadget SDK wrapper for Omarchy Linux](docs/omametamuse-header.png)
+
 **Muse on Omarchy Linux, packaged so anyone can load it the same way we did.**
 
 This repo packages the exact setup we proved on October 22, 2026: a
