@@ -26,8 +26,10 @@ Install timeline:
 
 1. First attempt failed at token validation. Cause: a placeholder
    token was pasted instead of a real one. No install completed, and
-   rerunning was safe. Lesson, now built into the CLI: the token is
-   checked for the `mgst_` prefix before the installer runs.
+   rerunning was safe. Lesson: the wrapper now leaves token collection
+   to Meta's installer, which prompts with echo hidden. The token never
+   appears on a command line unless you explicitly set `MUSE_SDK_TOKEN`
+   for automation.
 2. Second attempt with a fresh real token succeeded. The upstream
    installer pulled its pacman packages, set up its Python environment,
    adjusted BlueZ for pairing, saved the token on device only, and
@@ -48,9 +50,10 @@ Launcher, same day:
 - Icon: official blue Muse squiggle. The final working setup renders
   the official SVG to PNG with rsvg-convert and installs it as
   `muse-ai` at 256, 128, 64, 48, and 32 px under
-  `~/.local/share/icons/hicolor/`. The 256 px render was verified on
-  device as the Muse blue, and the owner confirmed on device:
-  "It's blue now."
+  `~/.local/share/icons/hicolor/`. If rsvg-convert is missing, the
+  fallback is `~/.local/share/icons/hicolor/scalable/apps/muse-ai.svg`.
+  The 256 px render was verified on device as the Muse blue, and the
+  owner confirmed on device: "It's blue now."
 - That icon method is what `muse-ai launcher` automates in this repo.
 
 Same machine, other proof: this Air also built and ran the

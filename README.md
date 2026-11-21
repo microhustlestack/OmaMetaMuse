@@ -2,6 +2,13 @@
 
 **Muse on Omarchy Linux, packaged so anyone can load it the same way we did.**
 
+> **Security notice:** the Muse gadget service grants Muse remote command
+> access to the machine it runs on, as the user who installed it, including
+> sudo if that user has sudo. Install it only on a machine you own and
+> control. Never install it on a machine you sell, ship, or hand over.
+> Read [SECURITY.md](SECURITY.md) and [DISCLAIMER.md](DISCLAIMER.md) before
+> installing. `muse-ai security` prints both documents in the terminal.
+
 This repo packages the exact setup we proved on October 22, 2026: a
 2011 MacBook Air running Omarchy Linux, turned into a Muse connected
 machine you can talk to and drive from chat.
@@ -29,7 +36,7 @@ Upstream license: Apache 2.0. This wrapper: MIT, see LICENSE.
 
 ## Install at a glance
 
-![Install guide: Muse on Omarchy Linux, A to Z, landscape](docs/install-guide-landscape.png)
+![Install guide: Muse on Omarchy Linux, A to Z, landscape](docs/install-guide-landscape.webp)
 
 The full step by step is in the Quick start below. The portrait
 version of this guide is at the bottom of this page.
@@ -62,6 +69,10 @@ Install it only on your own studio, demo, or personal machine.
 Never install it on a machine you sell, ship, or hand to someone else
 as an appliance. That is the rule this project was built under, and it
 is printed again by the installer before anything runs.
+
+Read [SECURITY.md](SECURITY.md) for the token rules and the full risk
+model, and [DISCLAIMER.md](DISCLAIMER.md) for the warranty and
+liability terms. `muse-ai security` prints both.
 
 ## Tested hardware
 
@@ -105,27 +116,34 @@ https://github.com/microhustlestack/second-brain-omarchy
 ## Quick start
 
 ```bash
-git clone https://github.com/microhustlestack/omametamuse.git
-cd omametamuse
+git clone https://github.com/microhustlestack/OmaMetaMuse.git
+cd OmaMetaMuse
 
 # 1. Check the machine first. No changes are made.
-#    (bash form, so a fresh clone works even without the exec bit set)
 bash bin/muse-ai doctor
 
-# 2. Install the Muse AI menu launcher only. No sudo, no token needed.
+# 2. Install the CLI and the Muse AI menu launcher. No sudo, no token.
 bash install.sh launcher
 
-# 3. Install the gadget service. This downloads Meta's official
-#    installer, shows it to you, then runs it with your token.
+# 3. Install the gadget service. Read the security notice first.
+#    This downloads Meta's official installer, checks it, prints its
+#    SHA-256, saves a review copy, and then runs it.
 bash install.sh gadget
-# It will prompt for your mgst_ token, hidden as you type.
+# Type INSTALL at the notice. Meta's installer then prompts for your
+# mgst_ token with echo hidden.
 
 # 4. Pair inside the 10 minute window, in the Muse app:
 #    Developer mode on, Settings, Devices, then pair this machine.
 
-# 5. Verify. After install.sh, muse-ai is on your PATH.
+# 5. Verify. install.sh puts muse-ai in ~/.local/bin.
 muse-ai status
 muse-ai doctor
+```
+
+If your shell cannot find `muse-ai`, add the user bin directory:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Then, from your Muse chat, ask Muse to check the machine. A healthy
@@ -140,10 +158,13 @@ background. The machine only needs to be awake and on Wi-Fi.
 
 ### User install, no packaging needed
 
-`bash install.sh` with no argument installs the launcher and the CLI
-into `~/.local`, and prints the gadget step without running it.
-`bash install.sh gadget` runs the gadget step. `bash install.sh all`
-does launcher, CLI, and gadget in one pass.
+`bash install.sh` with no argument installs the CLI and the launcher into
+`~/.local`, then prints the gadget step without running it.
+`bash install.sh gadget` runs the gadget step. `bash install.sh all` does
+the launcher, CLI, and gadget in one pass. `bash install.sh plugin`
+installs the companion bar plugin. `bash install.sh uninstall` removes the
+user launcher, icons, CLI, and plugin; the gadget service has its own
+removal command, `muse-ai uninstall-gadget`.
 
 ### Arch package, AUR style
 
@@ -152,10 +173,10 @@ makepkg -si
 ```
 
 The PKGBUILD installs the CLI to `/usr/bin/muse-ai`, the launcher to
-`/usr/share/applications/`, and the docs. It does not install the
-gadget service and it does not ask for a token. That step is always a
-separate, deliberate run of `muse-ai install-gadget`, for the safety
-reason above.
+`/usr/share/applications/`, the bar plugin source, and the docs. It does
+not install the gadget service and it does not ask for a token. That step
+is always a separate, deliberate run of `muse-ai install-gadget`, for the
+safety reason above.
 
 ## Companion bar plugin
 
@@ -163,36 +184,56 @@ The `plugin/` folder holds a small Omarchy 4 (Quattro) shell plugin: a
 bar widget that shows whether this machine is linked to Muse. It
 watches `musegadget.service` and shows a status dot next to the Muse
 icon in the bar, green while the service is active, red while it is
-not. Clicking it opens Muse through Omarchy's webapp launcher. Its plugin ID is
-`io.github.microhustlestack.muse`.
+not. Clicking it opens Muse through Omarchy's webapp launcher. Its plugin
+ID is `io.github.microhustlestack.muse`.
 
-The marketplace edition lives in its own repository, because the
-Omarchy plugin system installs one plugin from a repository root:
-
-https://github.com/microhustlestack/omarchy-muse-plugin
+Install the bundled copy from this repository:
 
 ```bash
-omarchy plugin add https://github.com/microhustlestack/omarchy-muse-plugin
+muse-ai plugin-install
+```
+
+That copies `plugin/` into
+`~/.config/omarchy/plugins/io.github.microhustlestack.muse/`, rescans the
+shell, and enables the widget. If you prefer to do it by hand:
+
+```bash
+mkdir -p ~/.config/omarchy/plugins/io.github.microhustlestack.muse
+cp -r plugin/. ~/.config/omarchy/plugins/io.github.microhustlestack.muse/
+omarchy-shell shell rescanPlugins
 omarchy plugin enable io.github.microhustlestack.muse
 ```
 
-The copy in `plugin/` here is the same source, kept with the package
-it belongs to. Settings, IPC commands, and removal instructions are in
-[plugin/README.md](plugin/README.md).
+Remove it with `muse-ai plugin-remove`. Settings, IPC commands, and
+manual removal instructions are in [plugin/README.md](plugin/README.md).
+The widget only reads `systemctl is-active` and runs the launch command
+you configure; it does not install or control the gadget service.
 
 ## The CLI
 
 ```text
-muse-ai doctor           Check OS, arch, Bluetooth, service, launcher
-muse-ai status           Short status: paired service and launcher
+muse-ai doctor           Check OS, arch, Bluetooth, service, launcher, icons
+muse-ai status           Short status: service, launcher, CLI, icon
+muse-ai open             Open Muse (muse.ai) as a webapp
 muse-ai launcher         Install or reinstall the Muse AI menu entry
-muse-ai install-gadget   Download Meta's official installer and run it
+muse-ai install-gadget   Read the security notice, then run Meta's installer
+muse-ai uninstall-gadget Remove the gadget service
+                         (--purge also deletes device identity and pairing)
 muse-ai pair-help        Print the pairing steps in order
-muse-ai uninstall        Remove the launcher and CLI user install
-                         (the gadget service has its own official
-                         uninstall: bash install.sh --uninstall
-                         from the upstream installer)
+muse-ai plugin-install   Install the bundled Omarchy bar plugin
+muse-ai plugin-remove    Remove the Omarchy bar plugin
+muse-ai security         Print the security notice and disclaimer
+muse-ai version          Print the CLI version
+muse-ai uninstall        Remove the launcher, icons, CLI, and plugin
 ```
+
+`muse-ai install-gadget` requires you to type `INSTALL` after the notice.
+For automation, read [SECURITY.md](SECURITY.md) and
+[DISCLAIMER.md](DISCLAIMER.md) first, then pass `--accept-disclaimer`.
+`--yes`, `--no-pair`, `--run-as`, and `--proxy` are forwarded to Meta's
+installer. `MUSE_SDK_TOKEN` is an explicit opt-in that forwards the token
+as an argument and prints a warning; the default path lets Meta's installer
+prompt with echo hidden, so the token never appears in `ps`.
 
 ## How the launcher works
 
@@ -206,8 +247,8 @@ follows that pattern exactly:
 - Icon: `muse-ai`, PNG renders at 256, 128, 64, 48, and 32 px, made
   at install time with `rsvg-convert` from the official Muse squiggle
   SVG at https://muse.ai/images/favicon/app-squiggle.svg, downloaded
-  directly by your machine. If `rsvg-convert` is missing, the SVG
-  itself is installed as the icon.
+  directly by your machine. If `rsvg-convert` is missing, the SVG is
+  installed at `~/.local/share/icons/hicolor/scalable/apps/muse-ai.svg`.
 
 ## Troubleshooting
 
@@ -219,16 +260,20 @@ follows that pattern exactly:
 - **No Bluetooth controller.** Check `systemctl status bluetooth`,
   try `bluetoothctl power on`, and check firmware. A USB Bluetooth
   dongle is the fallback on very old hardware.
-- **Pairing window missed.** Rerun `muse-ai install-gadget` or restart
-  the service and pair right away. You get a fresh window.
-- **Icon shows black or invisible.** Clear the thumbnail cache and
-  reinstall the launcher: `muse-ai launcher`. The working icon on our
-  test Air is the blue render, verified on device.
+- **Pairing window missed.** Run `sudo musegadget pair` and pair right away.
+- **Icon shows black or invisible.** Reinstall the launcher: `muse-ai
+  launcher`. It re-renders the blue icon and refreshes the icon cache.
+  If it still looks wrong, run
+  `gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor` and reopen
+  the launcher. The working icon on our test Air is the blue render,
+  verified on device.
 - **Service not active.** `systemctl status musegadget --no-pager`
   and `journalctl -u musegadget -f` on the machine.
 
 Full notes: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 Test log: [docs/TESTED-HARDWARE.md](docs/TESTED-HARDWARE.md)
+Security: [SECURITY.md](SECURITY.md)
+Disclaimer: [DISCLAIMER.md](DISCLAIMER.md)
 
 ## What this repo is not
 
@@ -251,4 +296,4 @@ end to end.
 
 ## Install guide, portrait version
 
-![Install guide: Muse on Omarchy Linux, A to Z](docs/install-guide.png)
+![Install guide: Muse on Omarchy Linux, A to Z](docs/install-guide.webp)
