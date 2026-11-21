@@ -47,7 +47,7 @@ package() {
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
   install -Dm644 SECURITY.md "$pkgdir/usr/share/doc/$pkgname/SECURITY.md"
   install -Dm644 DISCLAIMER.md "$pkgdir/usr/share/doc/$pkgname/DISCLAIMER.md"
-  install -Dm644 -t "$pkgdir/usr/share/doc/$pkgname/docs" docs/*.md docs/*.webp
+  install -Dm644 -t "$pkgdir/usr/share/doc/$pkgname/docs" docs/*.md docs/*.webp docs/omametamuse-header.png
   install -Dm644 -t "$pkgdir/usr/share/doc/$pkgname/plugin" plugin/README.md plugin/LICENSE
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
