@@ -1,8 +1,25 @@
 post_install() {
-  echo "  Muse Ai x Omarchy installed: CLI is muse-ai, menu entry is Muse AI."
+  echo "  Muse AI for Omarchy installed: CLI is muse-ai, menu entry is Muse AI."
+  echo "  Security notice: the gadget service grants remote command access to"
+  echo "  this machine. Read /usr/share/doc/muse-ai-omarchy-git/SECURITY.md and"
+  echo "  /usr/share/doc/muse-ai-omarchy-git/DISCLAIMER.md before installing it."
   echo "  Check this machine first:  muse-ai doctor"
+  echo "  Fetch the launcher icon:   muse-ai launcher"
   echo "  Gadget service is a separate, deliberate step on your OWN machine only:"
   echo "    muse-ai install-gadget"
   echo "  Never install the gadget service on a machine you sell or ship."
 }
-post_upgrade() { post_install; }
+
+post_upgrade() {
+  post_install
+}
+
+post_remove() {
+  echo "  Muse AI for Omarchy removed from /usr."
+  echo "  User launcher, icons, and bar plugin are not removed by pacman."
+  echo "  Remove them with:  muse-ai uninstall"
+  echo "  Gadget service:    muse-ai uninstall-gadget"
+  echo "  (Run those before removing the package if the CLI is already gone,"
+  echo "   or delete ~/.local/share/applications/Muse.desktop and the"
+  echo "   ~/.local/share/icons/hicolor/*/apps/muse-ai.* files by hand.)"
+}

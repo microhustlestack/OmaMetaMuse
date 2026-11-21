@@ -1,13 +1,34 @@
 #!/usr/bin/env bash
-# muse-ai: Omarchy helper for Muse AI launcher + Muse Gadget service.
+# OmaMetaMuse user CLI - safe to remove with: muse-ai uninstall
 # Wrapper only. The gadget service itself is Meta's official Muse
 # Gadgets Linux Device SDK, fetched from the official repo at install time.
 set -euo pipefail
 
+MUSE_AI_VERSION="1.2.0"
+PLUGIN_ID="io.github.microhustlestack.muse"
 UPSTREAM_REPO="facebookincubator/muse-gadget-sdk"
 UPSTREAM_INSTALL_URL="https://raw.githubusercontent.com/${UPSTREAM_REPO}/main/linux/install.sh"
 MUSE_SVG_URL="https://muse.ai/images/favicon/app-squiggle.svg"
-APP_ID="muse-ai"
+SECURITY_NOTICE_VERSION="2026-11-21"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/muse-ai"
+ACK_FILE="$STATE_DIR/security-ack"
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PLUGIN_DEST="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
+LOCAL_PLUGIN_DIR="$HOME/.local/share/muse-ai/plugin"
+
+TMP_DIRS=()
+cleanup() {
+  local dir
+  if (( ${#TMP_DIRS[@]} > 0 )); then
+    for dir in "${TMP_DIRS[@]}"; do
+      rm -rf -- "$dir"
+    done
+  fi
+  return 0
+}
 
 info() { printf '  %s\n' "$*"; }
 ok()   { printf '  ok %s\n' "$*"; }
@@ -15,76 +36,312 @@ warn() { printf '  ! %s\n' "$*" >&2; }
 fail() { printf '  x %s\n' "$*" >&2; exit 1; }
 
 banner() {
-  echo "OmaMetaMuse by WSTUNLTD"
-  echo "Wrapper for Meta's official Muse Gadgets SDK on Omarchy Linux."
+  [[ ${MUSE_AI_NO_BANNER:-0} == "1" ]] && return 0
+  printf '%s\n' "OmaMetaMuse by WSTUNLTD"
+  printf '%s\n' "Wrapper for Meta's official Muse Gadgets SDK on Omarchy Linux."
   echo
 }
 
-safety_notice() {
-  echo "SAFETY RULE"
-  echo "  The gadget service grants cloud command access to this machine,"
-  echo "  as your user, including sudo if your user has sudo."
-  echo "  Install it only on your own studio, demo, or personal machine."
-  echo "  Never install it on a machine you sell, ship, or give to a buyer."
+new_tmp() {
+  local -n result=$1
+  result="$(mktemp -d "${TMPDIR:-/tmp}/muse-ai.XXXXXX")"
+  TMP_DIRS+=("$result")
+}
+
+fetch() {
+  local url="$1"
+  local out="$2"
+  curl --disable --fail --silent --show-error --location \
+    --proto '=https' --tlsv1.2 \
+    --connect-timeout 15 --max-time 300 \
+    --retry 3 --retry-delay 2 \
+    --output "$out" "$url"
+}
+
+os_release_field() {
+  local key="$1"
+  [[ -r /etc/os-release ]] || return 0
+  awk -F= -v key="$key" '
+    $1 == key {
+      sub(/^[^=]*=/, "")
+      gsub(/^"|"$/, "")
+      print
+      exit
+    }
+  ' /etc/os-release
+}
+
+security_notice() {
+  cat <<'EOF'
+SECURITY NOTICE
+  The Muse gadget service gives Muse remote command access to this machine.
+  Commands run as the configured account (the installer user by default).
+  That account's permissions, including any sudo access, determine the risk.
+
+  Install it only on a machine you own and control. Never install it on a
+  machine you sell, ship, lend, or hand to someone else.
+
+  The SDK token is a secret. Never commit it, paste it into a chat or issue,
+  or share it. Meta's installer stores it root-only on this machine.
+
+  The installer is downloaded from Meta's official repository at install
+  time. Read it before running it. This wrapper prints its SHA-256 and saves
+  a copy for review.
+EOF
+}
+
+disclaimer_text() {
+  cat <<'EOF'
+DISCLAIMER
+  OmaMetaMuse is an unofficial community wrapper. It is not affiliated with,
+  endorsed by, or sponsored by Meta, Muse, Omarchy, or their owners.
+
+  This software is provided "as is", without warranty of any kind. You are
+  responsible for the machine, the account, the SDK token, and every command
+  you allow Muse to run. Install and use it at your own risk. To the extent
+  permitted by law, contributors are not liable for damages from its use.
+
+  By continuing, you confirm that you read and accept this notice and the
+  disclaimer. The canonical documents are SECURITY.md and DISCLAIMER.md in
+  the project repository, or under /usr/share/doc/ when installed as a
+  package.
+EOF
+}
+
+record_ack() {
+  local record
+  (umask 077; mkdir -p -- "$STATE_DIR")
+  record="$(mktemp "$STATE_DIR/.security-ack.XXXXXX")"
+  {
+    printf 'notice_version=%s\n' "$SECURITY_NOTICE_VERSION"
+    printf 'accepted_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'host=%s\n' "$(uname -n)"
+    printf 'user=%s\n' "$(id -un)"
+  } > "$record"
+  mv -Tf -- "$record" "$ACK_FILE"
+}
+
+show_ack() {
+  if [[ -f $ACK_FILE ]]; then
+    info "Last acknowledgment:"
+    sed 's/^/    /' "$ACK_FILE"
+  else
+    info "No acknowledgment recorded on this machine yet."
+  fi
+}
+
+cmd_security() {
+  banner
+  local dir
+  if dir="$(notice_docs)"; then
+    cat -- "$dir/SECURITY.md" "$dir/DISCLAIMER.md"
+  else
+    security_notice
+    echo
+    disclaimer_text
+  fi
   echo
+  show_ack
+  info "Print this again with: muse-ai security"
+}
+
+notice_docs() {
+  local dir
+  for dir in "$REPO_DIR" "$HOME/.local/share/muse-ai" /usr/share/doc/muse-ai-omarchy-git; do
+    if [[ -r $dir/SECURITY.md && -r $dir/DISCLAIMER.md ]]; then
+      printf '%s\n' "$dir"
+      return
+    fi
+  done
+  return 1
+}
+
+remote_access_reminder() {
+  local account
+  account="$(systemctl show --property=User --value musegadget.service 2>/dev/null || true)"
+  if [[ -n $account && $account != root ]]; then
+    warn "Muse may have remote command access as $account. Read: muse-ai security"
+  else
+    warn "Muse may have remote command access through this service. Read: muse-ai security"
+  fi
+}
+
+cmd_version() {
+  printf 'muse-ai %s\n' "$MUSE_AI_VERSION"
 }
 
 cmd_doctor() {
   banner
   local rc=0
+
   echo "System"
-  if [[ -r /etc/os-release ]]; then grep -E '^(NAME|VERSION)=' /etc/os-release | sed 's/^/  /'; fi
+  if [[ -r /etc/os-release ]]; then
+    local pretty id version
+    pretty="$(os_release_field PRETTY_NAME)"
+    id="$(os_release_field ID)"
+    version="$(os_release_field VERSION_ID)"
+    [[ -n $pretty ]] && info "$pretty"
+    [[ -n $id ]] && info "id: $id"
+    [[ -n $version ]] && info "version: $version"
+  fi
   info "arch: $(uname -m)"
-  case "$(uname -m)" in x86_64|aarch64) ok "arch accepted by upstream installer" ;; *) warn "arch not in upstream list (x86_64, aarch64)"; rc=1 ;; esac
-  info "user: $(whoami) (installer refuses root)"
-  [[ "$(id -u)" -ne 0 ]] && ok "not root" || { warn "running as root"; rc=1; }
+  case "$(uname -m)" in
+    x86_64|aarch64) ok "arch accepted by upstream installer" ;;
+    *) warn "arch not in upstream list (x86_64, aarch64)"; rc=1 ;;
+  esac
+  info "user: $(id -un) (installer refuses root)"
+  if [[ "$(id -u)" -ne 0 ]]; then ok "not root"; else warn "running as root"; rc=1; fi
+
+  local id idlike
+  id="$(os_release_field ID)"
+  idlike="$(os_release_field ID_LIKE)"
+  if [[ $id == "arch" || $idlike == *arch* ]] || command -v pacman >/dev/null 2>&1; then
+    ok "Arch-based system"
+  else
+    warn "not Arch-based; the upstream installer targets Arch"
+    rc=1
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    ok "sudo present"
+  else
+    warn "sudo not found; the upstream installer needs it"
+    rc=1
+  fi
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ok "$HOME/.local/bin on PATH" ;;
+    *) warn "$HOME/.local/bin is not on PATH; add: export PATH=\"\$HOME/.local/bin:\$PATH\""; rc=1 ;;
+  esac
+
+  local avail_kb
+  avail_kb="$(df -Pk "$HOME" 2>/dev/null | awk 'NR == 2 { print $4 }')"
+  if [[ $avail_kb =~ ^[0-9]+$ ]]; then
+    if (( avail_kb < 262144 )); then
+      warn "low disk: $((avail_kb / 1024)) MB free (need about 256 MB)"
+      rc=1
+    else
+      ok "disk: $((avail_kb / 1024 / 1024)) GB free"
+    fi
+  else
+    warn "could not read free disk space"
+  fi
 
   echo "Bluetooth (needed for the pairing window only)"
-  if ls /sys/class/bluetooth/* >/dev/null 2>&1; then ok "controller present: $(ls /sys/class/bluetooth | tr '\n' ' ')"; else warn "no controller in /sys/class/bluetooth"; rc=1; fi
-  if command -v bluetoothctl >/dev/null 2>&1; then bluetoothctl show 2>/dev/null | grep -E 'Powered|Pairable' | sed 's/^/  /' || true; fi
-  systemctl is-active bluetooth >/dev/null 2>&1 && ok "bluetooth.service active" || warn "bluetooth.service not active"
+  local controllers
+  controllers="$(find /sys/class/bluetooth -mindepth 1 -maxdepth 1 -printf '%f ' 2>/dev/null || true)"
+  if [[ -n $controllers ]]; then
+    ok "controller present: $controllers"
+  else
+    warn "no controller in /sys/class/bluetooth"
+    rc=1
+  fi
+  if command -v bluetoothctl >/dev/null 2>&1; then
+    bluetoothctl show 2>/dev/null | grep -E 'Powered|Pairable' | sed 's/^/  /' || true
+  fi
+  if systemctl is-active --quiet bluetooth >/dev/null 2>&1; then
+    ok "bluetooth.service active"
+  else
+    warn "bluetooth.service not active"
+  fi
 
   echo "Gadget service"
-  if systemctl is-active musegadget >/dev/null 2>&1; then ok "musegadget service active"; else warn "musegadget service not active (not installed, or not started)"; fi
+  if systemctl is-active --quiet musegadget >/dev/null 2>&1; then
+    ok "musegadget service active"
+    echo
+    remote_access_reminder
+  elif systemctl is-enabled --quiet musegadget >/dev/null 2>&1; then
+    warn "musegadget enabled but not active"
+    rc=1
+  else
+    warn "musegadget service not active (not installed, or not started)"
+  fi
 
   echo "Launcher"
-  if [[ -f "$HOME/.local/share/applications/Muse.desktop" ]] || [[ -f /usr/share/applications/Muse.desktop ]]; then ok "Muse AI menu entry present"; else warn "Muse AI menu entry not installed yet: muse-ai launcher"; fi
+  if [[ -f "$HOME/.local/share/applications/Muse.desktop" ]]; then
+    ok "Muse AI menu entry present (user)"
+  elif [[ -f /usr/share/applications/Muse.desktop ]]; then
+    ok "Muse AI menu entry present (system)"
+  else
+    warn "Muse AI menu entry not installed yet: muse-ai launcher"
+  fi
+  if [[ -f "$HOME/.local/share/icons/hicolor/256x256/apps/muse-ai.png" ]] \
+    || [[ -f "$HOME/.local/share/icons/hicolor/scalable/apps/muse-ai.svg" ]]; then
+    ok "Muse AI icon present"
+  else
+    info "Muse AI icon: not installed yet"
+  fi
 
   echo "Tools"
-  for t in curl git rsvg-convert omarchy-launch-webapp; do
-    command -v "$t" >/dev/null 2>&1 && info "$t: present" || info "$t: not found (only needed for some steps)"
+  local tool
+  for tool in curl git rsvg-convert omarchy-launch-webapp; do
+    if command -v "$tool" >/dev/null 2>&1; then
+      info "$tool: present"
+    else
+      info "$tool: not found (only needed for some steps)"
+      if [[ $tool == curl ]]; then rc=1; fi
+    fi
   done
   return $rc
 }
 
 cmd_status() {
   banner
-  systemctl is-active musegadget >/dev/null 2>&1 && ok "musegadget: active" || info "musegadget: not active"
-  [[ -f "$HOME/.local/share/applications/Muse.desktop" ]] && ok "launcher: installed (user)" || info "launcher: not in ~/.local/share/applications"
-  command -v musegadget >/dev/null 2>&1 && info "musegadget CLI: $(command -v musegadget)" || info "musegadget CLI: not on PATH yet"
+  if systemctl is-active --quiet musegadget >/dev/null 2>&1; then
+    ok "musegadget: active"
+    echo
+    remote_access_reminder
+  else
+    info "musegadget: not active"
+  fi
+  if systemctl is-enabled --quiet musegadget >/dev/null 2>&1; then
+    info "musegadget: enabled at boot"
+  else
+    info "musegadget: not enabled at boot"
+  fi
+  if [[ -f "$HOME/.local/share/applications/Muse.desktop" ]]; then
+    ok "launcher: installed (user)"
+  elif [[ -f /usr/share/applications/Muse.desktop ]]; then
+    ok "launcher: installed (system)"
+  else
+    info "launcher: not in ~/.local/share/applications"
+  fi
+  if command -v muse-ai >/dev/null 2>&1; then
+    info "CLI: $(command -v muse-ai)"
+  else
+    info "CLI: not on PATH"
+  fi
+  if [[ -f "$HOME/.local/share/icons/hicolor/256x256/apps/muse-ai.png" ]] \
+    || [[ -f "$HOME/.local/share/icons/hicolor/scalable/apps/muse-ai.svg" ]]; then
+    ok "icon: installed"
+  else
+    info "icon: not installed"
+  fi
 }
 
 install_icon() {
-  local tmp; tmp="$(mktemp -d)"
+  local tmp
+  new_tmp tmp
   info "Downloading official Muse icon from muse.ai"
-  if ! curl -fsSL "$MUSE_SVG_URL" -o "$tmp/muse.svg"; then
-    warn "icon download failed, launcher will use a generic icon name"
-    rm -rf "$tmp"; return 0
+  if ! fetch "$MUSE_SVG_URL" "$tmp/muse.svg"; then
+    warn "icon download failed; the launcher will use a generic icon name"
+    return 0
   fi
   if command -v rsvg-convert >/dev/null 2>&1; then
-    local size
+    local size dir
     for size in 256 128 64 48 32; do
-      mkdir -p "$HOME/.local/share/icons/hicolor/${size}x${size}/apps"
-      rsvg-convert -w "$size" -h "$size" "$tmp/muse.svg" -o "$HOME/.local/share/icons/hicolor/${size}x${size}/apps/muse-ai.png"
+      dir="$HOME/.local/share/icons/hicolor/${size}x${size}/apps"
+      mkdir -p "$dir"
+      rsvg-convert -w "$size" -h "$size" "$tmp/muse.svg" -o "$dir/muse-ai.png"
     done
-    ok "icon: muse-ai PNG renders installed (256 to 32 px)"
+    ok "icon: PNG renders installed (256 to 32 px)"
   else
-    mkdir -p "$HOME/.local/share/icons"
-    cp "$tmp/muse.svg" "$HOME/.local/share/icons/muse-ai.svg"
-    warn "rsvg-convert not found, installed SVG icon instead. For PNG renders: sudo pacman -S librsvg"
+    local dir="$HOME/.local/share/icons/hicolor/scalable/apps"
+    mkdir -p "$dir"
+    install -m644 "$tmp/muse.svg" "$dir/muse-ai.svg"
+    warn "rsvg-convert not found; installed SVG icon instead. For PNG renders: sudo pacman -S librsvg"
   fi
-  rm -rf "$tmp"
-  rm -rf "$HOME/.cache/thumbnails" 2>/dev/null || true
+  if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+  fi
 }
 
 cmd_open() {
@@ -95,60 +352,130 @@ cmd_open() {
   fi
 }
 
+launcher_template() {
+  local path
+  for path in \
+    "$REPO_DIR/share/applications/Muse.desktop" \
+    "$HOME/.local/share/muse-ai/Muse.desktop" \
+    "/usr/share/muse-ai-omarchy/Muse.desktop" \
+    "/usr/share/applications/Muse.desktop"; do
+    if [[ -f $path ]]; then
+      printf '%s\n' "$path"
+      return 0
+    fi
+  done
+  return 1
+}
+
 cmd_launcher() {
   banner
-  mkdir -p "$HOME/.local/share/applications"
+  local dest="$HOME/.local/share/applications/Muse.desktop"
   local src=""
-  if [[ -f "$(dirname "$0")/../share/applications/Muse.desktop" ]]; then
-    src="$(cd "$(dirname "$0")/.." && pwd)/share/applications/Muse.desktop"
-  elif [[ -f /usr/share/muse-ai-omarchy/Muse.desktop ]]; then
-    src="/usr/share/muse-ai-omarchy/Muse.desktop"
-  fi
-  if [[ -n "$src" && -f "$src" ]]; then
-    cp "$src" "$HOME/.local/share/applications/Muse.desktop"
-  else
-    cat > "$HOME/.local/share/applications/Muse.desktop" <<'EOF'
-[Desktop Entry]
-Name=Muse AI
-Comment=Muse by Meta, as an Omarchy webapp
-Exec=omarchy-launch-webapp https://muse.ai/
-Terminal=false
-Type=Application
-Icon=muse-ai
-Categories=Network;Chat;
-EOF
+  src="$(launcher_template || true)"
+  mkdir -p "$HOME/.local/share/applications"
+  if [[ -n $src ]]; then
+    if [[ "$src" -ef "$dest" ]]; then
+      info "launcher: already installed at $dest"
+    else
+      install -Dm644 "$src" "$dest"
+      ok "launcher: $dest"
+    fi
+  elif [[ ! -f $dest ]]; then
+    fail "launcher template not found; rerun install.sh from the checkout"
   fi
   install_icon
-  command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
-  ok "launcher: ~/.local/share/applications/Muse.desktop (Name: Muse AI)"
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
+  fi
   info "Open Omarchy's launcher and search: Muse AI"
 }
 
 cmd_install_gadget() {
   banner
-  safety_notice
+  security_notice
+  echo
+  disclaimer_text
+  echo
+
+  local accept=0
+  local upstream_args=()
+  while (( $# > 0 )); do
+    case "$1" in
+      --accept-disclaimer) accept=1 ;;
+      --yes|-y|--no-pair) upstream_args+=("$1") ;;
+      --run-as|--proxy|--no-proxy)
+        [[ $# -ge 2 && $2 != --* ]] || fail "$1 needs a value"
+        upstream_args+=("$1" "$2")
+        shift
+        ;;
+      *) fail "unknown install-gadget option; see muse-ai --help" ;;
+    esac
+    shift
+  done
+
   [[ "$(id -u)" -ne 0 ]] || fail "refusing to run as root. Rerun as your normal user."
-  read -r -p "  Type INSTALL to continue on THIS machine only: " ans
-  [[ "$ans" == "INSTALL" ]] || fail "cancelled"
-  local tmp; tmp="$(mktemp -d)"
+
+  if [[ $accept -eq 0 ]]; then
+    [[ -t 0 ]] || fail "non-interactive run. Read SECURITY.md and DISCLAIMER.md, then rerun with --accept-disclaimer."
+    local answer
+    read -r -p "  Type INSTALL to accept the notice and continue on THIS machine only: " answer || fail "cancelled"
+    [[ "$answer" == "INSTALL" ]] || fail "cancelled"
+  fi
+  record_ack
+
+  local tmp
+  new_tmp tmp
   info "Downloading Meta's official installer:"
   info "$UPSTREAM_INSTALL_URL"
-  curl -fsSL "$UPSTREAM_INSTALL_URL" -o "$tmp/install.sh" || fail "download failed"
-  echo
-  info "Review it before it runs: less $tmp/install.sh  (saved copy kept below)"
-  cp "$tmp/install.sh" "$HOME/.cache/muse-ai-upstream-install.sh" 2>/dev/null || true
-  local token=""
-  if [[ -n "${MUSE_SDK_TOKEN:-}" ]]; then
-    token="$MUSE_SDK_TOKEN"
-  else
-    read -r -s -p "  Paste your SDK token from gadgets.muse.ai (starts with mgst_, hidden): " token; echo
+  fetch "$UPSTREAM_INSTALL_URL" "$tmp/install.sh" || fail "download failed"
+  bash -n "$tmp/install.sh" || fail "downloaded installer failed bash -n"
+
+  local sha
+  sha="$(sha256sum "$tmp/install.sh" | awk '{ print $1 }')"
+  info "SHA-256: $sha"
+  local saved="$HOME/.cache/muse-ai/upstream-install.sh"
+  mkdir -p "$(dirname "$saved")"
+  install -m644 "$tmp/install.sh" "$saved"
+  info "Saved copy: $saved"
+
+  if [[ -t 0 && $accept -eq 0 ]]; then
+    local review
+    read -r -p "  Type REVIEW to inspect the installer, or press Enter to run it: " review || fail "cancelled"
+    if [[ "$review" == "REVIEW" ]]; then
+      if command -v less >/dev/null 2>&1; then
+        LESSSECURE=1 less -- "$tmp/install.sh"
+      else
+        cat -- "$tmp/install.sh"
+      fi
+      read -r -p "  Type INSTALL to run the installer, or anything else to cancel: " answer || fail "cancelled"
+      [[ "$answer" == "INSTALL" ]] || fail "cancelled"
+    elif [[ -n $review ]]; then
+      fail "cancelled"
+    fi
   fi
-  [[ "$token" == mgst_* ]] || fail "that does not look like an mgst_ SDK token. Make a fresh one at gadgets.muse.ai, Account, SDK tokens."
+
+  if [[ -n ${MUSE_SDK_TOKEN:-} ]]; then
+    if [[ ! $MUSE_SDK_TOKEN =~ ^mgst_[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$ ]]; then
+      fail "MUSE_SDK_TOKEN does not look like a valid mgst_ SDK token"
+    fi
+    warn "MUSE_SDK_TOKEN is set; passing it as an argument. It is visible in ps while the installer runs. Unset it to use Meta's hidden prompt."
+    upstream_args+=(--sdk-token "$MUSE_SDK_TOKEN")
+  else
+    case " ${upstream_args[*]} " in
+      *" --yes "*|*" -y "*|*" --no-pair "*)
+        warn "With --yes or --no-pair, Meta's installer will not prompt for a token. Set MUSE_SDK_TOKEN if this is a fresh install."
+        ;;
+    esac
+  fi
+
   info "Running the official installer. Expect the 'untested, Arch-based' warning on Omarchy. That is expected."
-  bash "$tmp/install.sh" --sdk-token "$token"
-  rm -rf "$tmp"
+  bash "$tmp/install.sh" "${upstream_args[@]}"
   echo
-  ok "installer finished. Pair now, inside the window:"
+  ok "installer finished"
+  local arg
+  for arg in "${upstream_args[@]}"; do
+    [[ $arg != --no-pair ]] || return 0
+  done
   cmd_pair_help
 }
 
@@ -167,36 +494,245 @@ cmd_pair_help() {
 EOF
 }
 
+cmd_uninstall_gadget() {
+  banner
+  echo "REMOVAL NOTICE"
+  echo "  This removes the Muse gadget service from this machine."
+  echo "  It does not delete your Muse account or remove the device from the app."
+  echo
+
+  local accept=0
+  local purge=0
+  local upstream_args=(--uninstall)
+  while (( $# > 0 )); do
+    case "$1" in
+      --accept-disclaimer) accept=1 ;;
+      --purge) purge=1; upstream_args+=(--purge) ;;
+      --yes|-y) upstream_args+=("$1") ;;
+      *) fail "unknown uninstall-gadget option: $1" ;;
+    esac
+    shift
+  done
+
+  if [[ $purge -eq 1 ]]; then
+    warn "--purge also deletes the device identity and pairing on this machine."
+    warn "Remove the device in the Muse app as well."
+  fi
+
+  [[ "$(id -u)" -ne 0 ]] || fail "refusing to run as root. Rerun as your normal user."
+  if [[ $accept -eq 0 ]]; then
+    [[ -t 0 ]] || fail "non-interactive run. Rerun with --accept-disclaimer."
+    local answer
+    read -r -p "  Type UNINSTALL to remove the gadget service from THIS machine: " answer || fail "cancelled"
+    [[ "$answer" == "UNINSTALL" ]] || fail "cancelled"
+  fi
+
+  local tmp
+  new_tmp tmp
+  info "Downloading Meta's official installer:"
+  info "$UPSTREAM_INSTALL_URL"
+  fetch "$UPSTREAM_INSTALL_URL" "$tmp/install.sh" || fail "download failed"
+  bash -n "$tmp/install.sh" || fail "downloaded installer failed bash -n"
+  info "Running the official uninstaller."
+  bash "$tmp/install.sh" "${upstream_args[@]}"
+  ok "gadget service removed"
+}
+
+plugin_source() {
+  local path
+  for path in "$REPO_DIR/plugin" "$LOCAL_PLUGIN_DIR" "/usr/share/muse-ai-omarchy/plugin"; do
+    if [[ -f "$path/manifest.json" ]]; then
+      printf '%s\n' "$path"
+      return 0
+    fi
+  done
+  return 1
+}
+
+cmd_plugin_install() {
+  banner
+  local force=0
+  while (( $# > 0 )); do
+    case "$1" in
+      --force) force=1 ;;
+      *) fail "unknown plugin-install option: $1" ;;
+    esac
+    shift
+  done
+
+  local src=""
+  src="$(plugin_source || true)"
+  [[ -n $src ]] || fail "plugin source not found. Run this from a clone of OmaMetaMuse, or install the package."
+  if command -v omarchy >/dev/null 2>&1; then
+    omarchy plugin validate "$src" || fail "plugin validation failed"
+  fi
+  if [[ -e $PLUGIN_DEST || -L $PLUGIN_DEST ]]; then
+    [[ $force -eq 1 ]] || fail "plugin already installed at $PLUGIN_DEST (use --force to replace it)"
+    local backup
+    backup="$(mktemp -d "$(dirname "$PLUGIN_DEST")/.${PLUGIN_ID}.backup.XXXXXX")"
+    mv -- "$PLUGIN_DEST" "$backup/"
+    info "backed up existing plugin to $backup"
+  fi
+  mkdir -p "$PLUGIN_DEST"
+  cp -a "$src/." "$PLUGIN_DEST/"
+  ok "plugin files: $PLUGIN_DEST"
+
+  if command -v omarchy >/dev/null 2>&1; then
+    if command -v omarchy-shell >/dev/null 2>&1; then
+      omarchy-shell shell rescanPlugins >/dev/null 2>&1 || warn "could not rescan plugins; restart the shell"
+    fi
+    if omarchy plugin enable "$PLUGIN_ID" >/dev/null 2>&1; then
+      ok "plugin enabled: $PLUGIN_ID"
+    else
+      warn "could not enable automatically; run: omarchy plugin enable $PLUGIN_ID"
+    fi
+  else
+    info "Omarchy CLI not found; enable the plugin from Setup, Plugins."
+  fi
+  info "Settings, IPC, and removal: $PLUGIN_DEST/README.md"
+}
+
+cmd_plugin_remove() {
+  banner
+  local yes=0
+  while (( $# > 0 )); do
+    case "$1" in
+      --yes|-y) yes=1 ;;
+      *) fail "unknown plugin-remove option: $1" ;;
+    esac
+    shift
+  done
+
+  if [[ ! -e $PLUGIN_DEST && ! -L $PLUGIN_DEST ]]; then
+    info "plugin is not installed at $PLUGIN_DEST"
+    return 0
+  fi
+  if [[ $yes -eq 0 ]]; then
+    [[ -t 0 ]] || fail "non-interactive run. Rerun with --yes."
+    local answer
+    read -r -p "  Remove the Muse bar plugin? [y/N] " answer
+    case "$answer" in
+      y|Y|yes|YES) ;;
+      *) fail "cancelled" ;;
+    esac
+  fi
+
+  if command -v omarchy >/dev/null 2>&1; then
+    omarchy plugin disable "$PLUGIN_ID" >/dev/null 2>&1 || true
+    omarchy plugin remove "$PLUGIN_ID" --yes || fail "Omarchy could not remove the plugin"
+  else
+    rm -rf -- "$PLUGIN_DEST"
+  fi
+  ok "plugin removed: $PLUGIN_ID"
+}
+
 cmd_uninstall() {
   banner
-  rm -f "$HOME/.local/share/applications/Muse.desktop"
-  ok "launcher removed"
-  info "The gadget service is Meta's, remove it with the official path:"
-  info "re-download the upstream install.sh, then: bash install.sh --uninstall"
+  local removed=0
+
+  if [[ -f "$HOME/.local/share/applications/Muse.desktop" ]]; then
+    rm -f "$HOME/.local/share/applications/Muse.desktop"
+    ok "launcher removed"
+    removed=1
+  fi
+
+  local size
+  for size in 256x256 128x128 64x64 48x48 32x32; do
+    rm -f "$HOME/.local/share/icons/hicolor/$size/apps/muse-ai.png"
+  done
+  rm -f "$HOME/.local/share/icons/hicolor/scalable/apps/muse-ai.svg"
+  rm -f "$HOME/.local/share/icons/muse-ai.svg"
+  ok "launcher icons removed"
+
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
+  fi
+  if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+  fi
+
+  if [[ -e $PLUGIN_DEST || -L $PLUGIN_DEST ]]; then
+    cmd_plugin_remove --yes
+    removed=1
+  fi
+
+  local cli="$HOME/.local/bin/muse-ai"
+  if [[ -f $cli ]] && grep -q 'OmaMetaMuse user CLI' "$cli"; then
+    rm -f "$cli"
+    ok "CLI removed: $cli"
+    removed=1
+  elif [[ -f $cli ]]; then
+    warn "left $cli in place: it is not an OmaMetaMuse user install"
+  fi
+
+  rm -rf "$HOME/.cache/muse-ai"
+  rm -rf "$HOME/.local/share/muse-ai"
+  rm -f -- "$ACK_FILE"
+  rmdir -- "$STATE_DIR" 2>/dev/null || true
+
+  if [[ $removed -eq 0 ]]; then
+    info "nothing to remove in the user install"
+  fi
+  echo
+  info "The gadget service is separate. From the checkout, use: ./install.sh uninstall-gadget"
 }
 
 usage() {
   banner
   cat <<'EOF'
 Usage: muse-ai <command>
-  doctor           Check OS, arch, Bluetooth, service, launcher
-  status           Short status: paired service and launcher
-  open             Open Muse (muse.ai) as a webapp
-  launcher         Install or reinstall the Muse AI menu entry
-  install-gadget   Download Meta's official installer and run it
-  pair-help        Print the pairing steps in order
-  uninstall        Remove the launcher user install
+
+  doctor              Check OS, arch, Bluetooth, service, launcher, icons
+  status              Short status: service, launcher, CLI, icon
+  open                Open Muse (muse.ai) as a webapp
+  launcher            Install or reinstall the Muse AI menu entry
+  install-gadget      Read the security notice, then run Meta's installer
+  uninstall-gadget    Remove the gadget service (add --purge for identity)
+  pair-help           Print the pairing steps in order
+  plugin-install      Install the bundled Omarchy bar plugin
+  plugin-remove       Remove the Omarchy bar plugin
+  security            Print the security notice and disclaimer
+  disclaimer          Alias for security
+  version             Print the CLI version
+  uninstall           Remove the launcher, icons, CLI, and plugin
+
+Install-gadget options:
+  --accept-disclaimer   Non-interactive acceptance. Read the documents first.
+  --yes, --no-pair      Forwarded to Meta's installer.
+  --run-as USER         Forwarded to Meta's installer.
+  --proxy URL           Forwarded to Meta's installer.
+  --no-proxy HOSTS      Forwarded to Meta's installer.
+
+Uninstall-gadget options: --purge, --yes, --accept-disclaimer.
 EOF
 }
 
-case "${1:-}" in
-  doctor) cmd_doctor ;;
-  status) cmd_status ;;
-  open) cmd_open ;;
-  launcher) cmd_launcher ;;
-  install-gadget) cmd_install_gadget ;;
-  pair-help) cmd_pair_help ;;
-  uninstall) cmd_uninstall ;;
-  ""|-h|--help|help) usage ;;
-  *) warn "unknown command: $1"; usage; exit 1 ;;
-esac
+main() {
+  local cmd="${1:-}"
+  if (( $# > 0 )); then shift; fi
+  case "$cmd" in
+    doctor) cmd_doctor ;;
+    status) cmd_status ;;
+    open) cmd_open ;;
+    launcher) cmd_launcher ;;
+    install-gadget) cmd_install_gadget "$@" ;;
+    uninstall-gadget) cmd_uninstall_gadget "$@" ;;
+    pair-help) cmd_pair_help ;;
+    plugin-install) cmd_plugin_install "$@" ;;
+    plugin-remove) cmd_plugin_remove "$@" ;;
+    security|disclaimer) cmd_security ;;
+    version|--version|-V) cmd_version ;;
+    uninstall) cmd_uninstall ;;
+    ""|-h|--help|help) usage ;;
+    *)
+      warn "unknown command: $cmd"
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  trap cleanup EXIT
+  main "$@"
+fi

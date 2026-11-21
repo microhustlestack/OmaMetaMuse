@@ -24,7 +24,7 @@ BarWidget {
   readonly property string iconName: setting("iconName", "muse-ai")
   readonly property string label: setting("label", "Muse")
   readonly property bool showLabel: setting("showLabel", false)
-  readonly property int refreshSeconds: setting("refreshSeconds", 30)
+  readonly property int refreshSeconds: Math.max(5, Math.min(300, Number(setting("refreshSeconds", 30)) || 30))
   readonly property string serviceName: setting("serviceName", "musegadget.service")
   readonly property string launchCommand: setting("launchCommand", "omarchy-launch-webapp https://muse.ai/")
 
@@ -39,36 +39,133 @@ BarWidget {
   property string linkState: ""
 
   readonly property bool linked: linkState === "active"
-  readonly property color dotColor: linkState === "" ? "#888888" : (linked ? "#7fc348" : "#e5484d")
+  readonly property color dotColor: linkState === "" ? Color.muted : (linked ? "#7fc348" : Color.urgent)
   readonly property color fg: bar ? bar.barForeground : Color.foreground
 
+  // Click contract used by the bar host. The host only dispatches a press
+  // to a target that exposes triggerPress(), so the widget root, not the
+  // MouseArea, is the registered target.
+  property bool interactive: true
+  property bool pressable: true
+  property bool concealed: false
+  property int heldButtons: Qt.NoButton
+  property var registeredBar: null
+  readonly property bool tooltipHovered: visible && interactive && !concealed && mouseArea.containsMouse
+  readonly property string tooltipText: {
+    if (root.linkState === "") return "Muse: checking the gadget service..."
+    if (root.linked) return "Muse gadget service active. Click to open Muse."
+    return "Muse gadget service " + root.linkState + ". Click to open Muse."
+  }
+  readonly property real pressScale: root.pressable
+    && ((mouseArea.pressedButtons | root.heldButtons) & (Qt.LeftButton | Qt.RightButton | Qt.MiddleButton))
+    ? 0.9 : 1
+
   function refresh() {
-    if (!statusProc.running) statusProc.running = true
+    if (statusProc.running) return
+    checkTimeout.restart()
+    statusProc.running = true
   }
 
   function launch() {
-    launchProc.command = launchCommand.split(" ").filter(function (s) { return s.length > 0 })
-    launchProc.running = true
+    if (root.bar && typeof root.bar.run === "function") {
+      root.bar.run(root.launchCommand)
+    } else {
+      Quickshell.execDetached(["bash", "-lc", root.launchCommand])
+    }
   }
 
-  implicitWidth: row.implicitWidth + 16
-  implicitHeight: row.implicitHeight
+  function triggerPress(button) {
+    if (root.bar && typeof root.bar.hideTooltip === "function") root.bar.hideTooltip(root)
+    if (button === Qt.MiddleButton) root.broadcast("refresh")
+    else if (button === Qt.LeftButton) root.launch()
+  }
 
-  Process {
-    id: statusProc
-    command: ["systemctl", "is-active", root.serviceName]
-    stdout: StdioCollector {
-      onStreamFinished: root.linkState = text.trim()
+  function syncClickRegistration() {
+    if (registeredBar && typeof registeredBar.unregisterClickTarget === "function")
+      registeredBar.unregisterClickTarget(root)
+    registeredBar = root.bar
+    if (registeredBar && typeof registeredBar.registerClickTarget === "function")
+      registeredBar.registerClickTarget(root)
+  }
+
+  onBarChanged: syncClickRegistration()
+  Component.onCompleted: syncClickRegistration()
+  Component.onDestruction: {
+    if (registeredBar && typeof registeredBar.unregisterClickTarget === "function")
+      registeredBar.unregisterClickTarget(root)
+  }
+  onVisibleChanged: if (!visible && root.bar) root.bar.hideTooltip(root)
+  onInteractiveChanged: if (!interactive && root.bar) root.bar.hideTooltip(root)
+  onConcealedChanged: if (concealed && root.bar) root.bar.hideTooltip(root)
+  onLinkStateChanged: if (mouseArea.containsMouse && root.bar) root.bar.showTooltip(root, root.tooltipText)
+
+  implicitWidth: root.vertical ? root.barSize : content.implicitWidth + Style.space(16)
+  implicitHeight: root.vertical ? Math.max(root.barSize, content.implicitHeight + Style.space(8)) : root.barSize
+
+  Behavior on pressScale {
+    NumberAnimation {
+      duration: Style.duration(160)
+      easing.type: Easing.Bezier
+      easing.bezierCurve: Style.easeOut
+    }
+  }
+
+  Grid {
+    id: content
+    anchors.centerIn: parent
+    columns: root.vertical ? 1 : 3
+    horizontalItemAlignment: Grid.AlignHCenter
+    verticalItemAlignment: Grid.AlignVCenter
+    columnSpacing: root.vertical ? 0 : Style.space(6)
+    rowSpacing: root.vertical ? Style.space(2) : 0
+    scale: root.pressScale
+
+    Rectangle {
+      width: Math.max(6, Style.space(8))
+      height: width
+      radius: width / 2
+      color: root.dotColor
+    }
+
+    IconImage {
+      visible: root.hasIcon
+      implicitSize: Style.bar.iconCanvas
+      source: root.iconSource
+    }
+
+    Text {
+      visible: !root.vertical && (root.showLabel || !root.hasIcon)
+      text: root.label
+      textFormat: Text.PlainText
+      color: root.fg
+      font.family: root.bar ? root.bar.fontFamily : Style.font.family
+      font.pixelSize: Style.font.body
+      renderType: Text.NativeRendering
     }
   }
 
   Process {
-    id: launchProc
-    command: ["omarchy-launch-webapp", "https://muse.ai/"]
+    id: statusProc
+    command: ["systemctl", "is-active", "--", root.serviceName]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        checkTimeout.stop()
+        root.linkState = text.trim() || "unavailable"
+      }
+    }
   }
 
   Timer {
-    interval: Math.max(5, root.refreshSeconds) * 1000
+    id: checkTimeout
+    interval: 4000
+    onTriggered: {
+      statusProc.running = false
+      root.linkState = "unavailable"
+    }
+  }
+
+  Timer {
+    interval: root.refreshSeconds * 1000
     running: true
     repeat: true
     triggeredOnStart: true
@@ -77,62 +174,25 @@ BarWidget {
 
   IpcHandler {
     target: "io.github.microhustlestack.muse"
-    function status(): string { return root.linkState }
-    function refresh(): void { root.refresh() }
+    function status(): string { return root.linkState || "unknown" }
+    function refresh(): void { root.broadcast("refresh") }
     function launch(): void { root.launch() }
   }
 
-  Row {
-    id: row
-    anchors.centerIn: parent
-    spacing: 6
-
-    Rectangle {
-      anchors.verticalCenter: parent.verticalCenter
-      width: 8
-      height: 8
-      radius: 4
-      color: root.dotColor
-    }
-
-    IconImage {
-      anchors.verticalCenter: parent.verticalCenter
-      visible: root.hasIcon && !root.vertical
-      implicitSize: 18
-      source: root.iconSource
-    }
-
-    Text {
-      anchors.verticalCenter: parent.verticalCenter
-      visible: !root.vertical && (root.showLabel || !root.hasIcon)
-      text: root.label
-      color: root.fg
-      font.family: root.bar ? root.bar.fontFamily : Style.font.family
-      font.pixelSize: Style.font.body
-    }
-  }
-
   // The bar host owns pointer input over widget slots (for dragging and
-  // panel marks), so a plain MouseArea in a third-party widget never sees a
-  // click. Registering the MouseArea as a click target with the injected
-  // bar API is what lets its clicks through. The bar is injected after the
-  // widget is created, so registration syncs whenever it changes.
-  function syncClickRegistration() {
-    if (root.bar && typeof root.bar.registerClickTarget === "function")
-      root.bar.registerClickTarget(clickArea)
-  }
-
-  onBarChanged: syncClickRegistration()
-  Component.onCompleted: syncClickRegistration()
-  Component.onDestruction: {
-    if (root.bar && typeof root.bar.unregisterClickTarget === "function")
-      root.bar.unregisterClickTarget(clickArea)
-  }
-
+  // panel marks), so a plain MouseArea never sees a click on its own.
+  // triggerPress() above is the path the host uses. The MouseArea remains
+  // as a fallback for shells that do not register click targets, and it
+  // also owns hover for the tooltip.
   MouseArea {
-    id: clickArea
+    id: mouseArea
     anchors.fill: parent
-    cursorShape: Qt.PointingHandCursor
-    onClicked: root.launch()
+    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+    enabled: root.interactive
+    hoverEnabled: true
+    cursorShape: root.pressable ? Qt.PointingHandCursor : Qt.ArrowCursor
+    onEntered: if (root.bar) root.bar.showTooltip(root, root.tooltipText)
+    onExited: if (root.bar) root.bar.hideTooltip(root)
+    onClicked: function(mouse) { if (root.pressable) root.triggerPress(mouse.button) }
   }
 }
